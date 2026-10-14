@@ -1,0 +1,24 @@
+# Virtual environment (machine-specific, recreated from requirements.txt)
+.venv/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Jupyter autosave checkpoints
+.ipynb_checkpoints/
+
+# Packaging artefacts
+*.egg-info/
+build/
+dist/
+
+# Secrets (none expected, but never commit them)
+.env
+
+# Editor and Windows clutter
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

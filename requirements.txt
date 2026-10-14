@@ -1,0 +1,9 @@
+# Python 3.14 (tested on 3.14.8, Windows)
+numpy==2.5.4
+scipy==1.18.1
+matplotlib==3.11.2
+pandas==3.0.6
+pytest==9.1.1
+notebook==7.6.3
+ipykernel==7.4.0
+nbconvert==7.17.2
