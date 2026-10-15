@@ -22,3 +22,5 @@ dist/
 .idea/
 Thumbs.db
 desktop.ini
+# Reference consulted but not used (cited by URL in data/raw/population/SOURCES.md)
+data/raw/population/2023-Statistical-Abstract.pdf
