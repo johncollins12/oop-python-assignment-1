@@ -1,0 +1,1 @@
+"""OOP with Python, Assignment 1 (Advent 2026): reusable code for five mini-projects."""

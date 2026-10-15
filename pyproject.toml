@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oop-python-assignment-1"
+version = "0.1.0"
+description = "OOP with Python Assignment 1 (Advent 2026): five mini-projects"
+authors = [{ name = "Wesonga John Collins" }]
+requires-python = ">=3.14"
+
+[tool.setuptools.packages.find]
+where = ["src"]
