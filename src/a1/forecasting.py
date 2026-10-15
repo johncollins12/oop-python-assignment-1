@@ -216,6 +216,7 @@ def bootstrap_intervals(
     rng: np.random.Generator,
     n_boot: int = 1000,
     level: float = 0.95,
+    center: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Residual-bootstrap prediction intervals, refitting the model each time.
 
@@ -223,6 +224,11 @@ def bootstrap_intervals(
     resampled residuals), refit a clone of the model, forecast, and add a
     resampled residual to each future step. Percentiles of the replicates give
     the interval. `rng` is required so results are always reproducible.
+
+    If `center` is True (default) the residuals are shifted to mean zero before
+    resampling. Without this, a model whose fitted path is biased (e.g. CAGR,
+    which passes exactly through the first and last points) would push every
+    replicate in one direction and shift the whole interval.
 
     Returns
     -------
@@ -238,6 +244,8 @@ def bootstrap_intervals(
     point = base.predict(horizon)
     fitted = base.fitted_values()
     resid = y - fitted
+    if center:
+        resid = resid - resid.mean()
 
     sims = np.empty((n_boot, horizon))
     for b in range(n_boot):

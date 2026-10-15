@@ -147,3 +147,24 @@ def test_bootstrap_is_reproducible_with_same_seed():
 def test_bootstrap_requires_a_generator():
     with pytest.raises(TypeError):
         bootstrap_intervals(LinearTrendForecaster(), [1, 2, 3], 2)
+
+def test_centring_has_no_effect_when_residuals_already_average_zero():
+    # Least-squares residuals of a line with an intercept have mean zero.
+    noise = np.random.default_rng(3).normal(0, 4, size=10)
+    y = 50 + 2 * np.arange(10) + noise
+    centred = bootstrap_intervals(LinearTrendForecaster(), y, 3, rng=np.random.default_rng(5))
+    raw = bootstrap_intervals(
+        LinearTrendForecaster(), y, 3, rng=np.random.default_rng(5), center=False
+    )
+    for a, b in zip(centred, raw):
+        np.testing.assert_allclose(a, b)
+
+
+def test_centred_cagr_interval_contains_point_forecast():
+    # Curved series whose CAGR residuals have a clearly negative mean.
+    y = [1200, 1250, 1300, 1350, 1420, 1500, 1580, 1650, 1720, 1800]
+    assert CAGRForecaster().fit(y).residuals().mean() < -1
+    point, lower, upper = bootstrap_intervals(
+        CAGRForecaster(), y, 5, rng=np.random.default_rng(2026), n_boot=2000
+    )
+    assert np.all(lower < point) and np.all(point < upper)
