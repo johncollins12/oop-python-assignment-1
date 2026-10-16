@@ -115,5 +115,5 @@ Each notebook ends with a full *Findings & Limitations* section; the key points 
 
 ## AI-use declaration
 
-I used AI tools to support the development of this assignment. The AI assistant provided assistance with interpreting the assignment requirements, exploring software design approaches and debugging Python code. Artificial Intelligence (AI) tools were used to support the development of this assignment. The AI assistant provided assistance with interpreting the assignment requirements, exploring software design approaches, explaining programming concepts, developing and debugging Python code, preparing automated tests, and structuring Jupyter notebooks and documentation.
+I used AI tools to support the development of this assignment. The AI assistant provided assistance with interpreting the assignment requirements, exploring software design approaches and debugging Python code. 
 
