@@ -16,9 +16,13 @@ __all__ = [
     "LinearTrendForecaster",
     "CAGRForecaster",
     "FibonacciRatioForecaster",
+    "MovingAverageForecaster",
+    "SESForecaster",
+    "SeasonalNaiveForecaster",
     "fibonacci_numbers",
     "fibonacci_ratios",
     "bootstrap_intervals",
+    "walk_forward",
 ]
 
 
@@ -206,6 +210,125 @@ class FibonacciRatioForecaster(Forecaster):
     def _fitted(self) -> np.ndarray:
         growth = np.cumprod(fibonacci_ratios(self.start_index, self._n - 1))
         return self._first * np.concatenate(([1.0], growth))
+
+
+class MovingAverageForecaster(Forecaster):
+    """Forecast every future step as the mean of the last `window` observations.
+
+    In-sample values are one-step-ahead moving averages; the first `window`
+    positions have no forecast and are NaN.
+    """
+
+    def __init__(self, window: int = 3) -> None:
+        super().__init__()
+        if isinstance(window, bool) or not isinstance(window, int) or window < 1:
+            raise ValueError("window must be an integer >= 1")
+        self.window = window
+        self.min_points = window
+        self.name = f"{window}-day moving average"
+
+    def _params(self) -> dict:
+        return {"window": self.window}
+
+    def _fit(self, y: np.ndarray) -> None:
+        self.level = float(np.mean(y[-self.window:]))
+        self._y = y.copy()
+
+    def _predict(self, horizon: int) -> np.ndarray:
+        return np.full(horizon, self.level)
+
+    def _fitted(self) -> np.ndarray:
+        out = np.full(self._y.size, np.nan)
+        for t in range(self.window, self._y.size):
+            out[t] = self._y[t - self.window:t].mean()
+        return out
+
+
+class SESForecaster(Forecaster):
+    """Simple exponential smoothing with smoothing constant `alpha` in (0, 1].
+
+    level_0 = y_0, then level_t = alpha * y_t + (1 - alpha) * level_{t-1}.
+    Every future step is forecast as the final level. alpha = 1 gives the
+    naive forecast (last value); small alpha averages over a long history.
+    """
+
+    name = "SES"
+    min_points = 1
+
+    def __init__(self, alpha: float = 0.5) -> None:
+        super().__init__()
+        if isinstance(alpha, bool) or not isinstance(alpha, (int, float)) or not 0 < alpha <= 1:
+            raise ValueError("alpha must be a number in (0, 1]")
+        self.alpha = float(alpha)
+
+    def _params(self) -> dict:
+        return {"alpha": self.alpha}
+
+    def _fit(self, y: np.ndarray) -> None:
+        fitted = np.empty(y.size)
+        level = y[0]
+        fitted[0] = level                       # no forecast exists for the first point
+        for t in range(1, y.size):
+            fitted[t] = level                   # one-step-ahead forecast of y_t
+            level = self.alpha * y[t] + (1.0 - self.alpha) * level
+        self.level = float(level)
+        self._in_sample = fitted
+
+    def _predict(self, horizon: int) -> np.ndarray:
+        return np.full(horizon, self.level)
+
+    def _fitted(self) -> np.ndarray:
+        return self._in_sample.copy()
+
+
+class SeasonalNaiveForecaster(Forecaster):
+    """Repeat the last full season: y_{T+h} = y_{T+h-season} (weekly when season=7).
+
+    In-sample values are y_{t-season}; the first `season` positions are NaN.
+    """
+
+    def __init__(self, season: int = 7) -> None:
+        super().__init__()
+        if isinstance(season, bool) or not isinstance(season, int) or season < 1:
+            raise ValueError("season must be an integer >= 1")
+        self.season = season
+        self.min_points = season
+        self.name = f"Seasonal naive ({season})"
+
+    def _params(self) -> dict:
+        return {"season": self.season}
+
+    def _fit(self, y: np.ndarray) -> None:
+        self._last_season = y[-self.season:].copy()
+        self._y = y.copy()
+
+    def _predict(self, horizon: int) -> np.ndarray:
+        return self._last_season[np.arange(horizon) % self.season]
+
+    def _fitted(self) -> np.ndarray:
+        out = np.full(self._y.size, np.nan)
+        out[self.season:] = self._y[:-self.season]
+        return out
+
+
+def walk_forward(
+    forecaster: Forecaster, values: ArrayLike, first_target: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rolling-origin one-step-ahead forecasts.
+
+    For each target position t = first_target, ..., n-1 (0-based), a fresh
+    clone of the model is fitted on values[:t] only and forecasts values[t].
+
+    Returns (target positions, predictions).
+    """
+    y = np.asarray(values, dtype=float)
+    if not 1 <= first_target < y.size:
+        raise ValueError("first_target must leave at least one training and one target value")
+    targets = np.arange(first_target, y.size)
+    predictions = np.array(
+        [forecaster.clone().fit(y[:t]).predict(1)[0] for t in targets]
+    )
+    return targets, predictions
 
 
 def bootstrap_intervals(

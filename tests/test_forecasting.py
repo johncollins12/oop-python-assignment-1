@@ -10,12 +10,22 @@ from a1.forecasting import (
     FibonacciRatioForecaster,
     Forecaster,
     LinearTrendForecaster,
+    MovingAverageForecaster,
+    SeasonalNaiveForecaster,
+    SESForecaster,
     bootstrap_intervals,
     fibonacci_numbers,
     fibonacci_ratios,
+    walk_forward,
 )
 
-ALL_MODELS = [LinearTrendForecaster, CAGRForecaster, FibonacciRatioForecaster]
+ALL_MODELS = [
+    LinearTrendForecaster,
+    CAGRForecaster,
+    FibonacciRatioForecaster,
+    MovingAverageForecaster,
+    SESForecaster,
+]
 
 
 # ----- the abstract base -------------------------------------------------------
@@ -72,6 +82,68 @@ def test_fibonacci_rejects_invalid_start_index():
             FibonacciRatioForecaster(start_index=bad)
 
 
+# ----- moving average, SES and seasonal naive (MP5) ------------------------------
+def test_moving_average_uses_last_window_values():
+    model = MovingAverageForecaster(window=3).fit([10, 20, 30, 40])
+    np.testing.assert_allclose(model.predict(2), [30, 30])          # mean(20, 30, 40)
+    fitted = model.fitted_values()
+    assert np.isnan(fitted[:3]).all()
+    assert fitted[3] == pytest.approx(20)                            # mean(10, 20, 30)
+
+
+def test_ses_hand_calculation():
+    # level: 10 -> 0.5*20 + 0.5*10 = 15 -> 0.5*30 + 0.5*15 = 22.5
+    model = SESForecaster(alpha=0.5).fit([10, 20, 30])
+    assert model.level == pytest.approx(22.5)
+    np.testing.assert_allclose(model.predict(3), [22.5, 22.5, 22.5])
+    np.testing.assert_allclose(model.fitted_values(), [10, 10, 15])
+
+
+def test_ses_with_alpha_one_is_the_naive_forecast():
+    assert SESForecaster(alpha=1.0).fit([3, 9, 4, 7]).predict(1)[0] == pytest.approx(7)
+
+
+@pytest.mark.parametrize("bad", [0, -0.1, 1.5, True])
+def test_ses_rejects_invalid_alpha(bad):
+    with pytest.raises(ValueError):
+        SESForecaster(alpha=bad)
+
+
+def test_seasonal_naive_repeats_last_season():
+    y = [1, 2, 3, 10, 20, 30]
+    model = SeasonalNaiveForecaster(season=3).fit(y)
+    np.testing.assert_allclose(model.predict(5), [10, 20, 30, 10, 20])
+
+
+def test_seasonal_naive_is_exact_on_a_periodic_series():
+    week = np.array([50, 52, 51, 55, 70, 45, 35], dtype=float)
+    y = np.tile(week, 4)
+    _, preds = walk_forward(SeasonalNaiveForecaster(7), y, first_target=7)
+    np.testing.assert_allclose(preds, y[7:])
+
+
+# ----- walk-forward evaluation ----------------------------------------------------
+def test_walk_forward_moving_average_hand_values():
+    y = np.arange(1, 11, dtype=float)                 # days 1..10
+    targets, preds = walk_forward(MovingAverageForecaster(3), y, first_target=3)
+    assert targets.tolist() == list(range(3, 10))     # days 4..10
+    np.testing.assert_allclose(preds, [2, 3, 4, 5, 6, 7, 8])
+
+
+def test_walk_forward_never_uses_future_values():
+    y = np.array([35, 40, 42, 50, 55, 60, 48, 52, 47, 45], dtype=float)
+    changed = y.copy()
+    changed[-1] = 999.0                                # only the last day differs
+    _, a = walk_forward(SESForecaster(0.3), y, first_target=3)
+    _, b = walk_forward(SESForecaster(0.3), changed, first_target=3)
+    np.testing.assert_allclose(a, b)                   # forecast of day 10 uses days 1-9 only
+
+
+def test_walk_forward_rejects_invalid_origin():
+    with pytest.raises(ValueError):
+        walk_forward(MovingAverageForecaster(3), [1, 2, 3], first_target=3)
+
+
 # ----- the interface contract, checked for every model -------------------------
 @pytest.mark.parametrize("model_cls", ALL_MODELS)
 def test_predict_before_fit_raises(model_cls):
@@ -120,6 +192,7 @@ def test_clone_is_unfitted_and_keeps_settings():
 
 def test_repr_shows_settings_and_state():
     assert repr(FibonacciRatioForecaster(3)) == "FibonacciRatioForecaster(start_index=3, fitted=False)"
+    assert repr(SESForecaster(0.25)) == "SESForecaster(alpha=0.25, fitted=False)"
 
 
 # ----- bootstrap prediction intervals -------------------------------------------
@@ -147,6 +220,7 @@ def test_bootstrap_is_reproducible_with_same_seed():
 def test_bootstrap_requires_a_generator():
     with pytest.raises(TypeError):
         bootstrap_intervals(LinearTrendForecaster(), [1, 2, 3], 2)
+
 
 def test_centring_has_no_effect_when_residuals_already_average_zero():
     # Least-squares residuals of a line with an intercept have mean zero.
